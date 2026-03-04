@@ -1,4 +1,8 @@
+import asyncio
+
 import typer
+
+from .data import read_weather_data
 
 ##########
 # public #
@@ -35,4 +39,4 @@ def _init_cli() -> typer.Typer:
 
 
 def _run() -> None:
-    pass
+    closest, latest = asyncio.run(read_weather_data())
