@@ -76,22 +76,38 @@ def extract_storms(
 def read_fetch() -> pl.DataFrame:
     cpe_loc = (47.366445362339576, -61.87199621249825)
     lat, lon = cpe_loc
-    path = data_dir / "raw" / "bathymetry" / "bathymetry.nc"
+    path = data_dir / "raw" / "fetch.ipc"
+    bathymetry_path = data_dir / "raw" / "bathymetry" / "bathymetry.nc"
     zip_path = data_dir / "raw" / "bathymetry.zip"
 
-    if not path.exists():
-        with zipfile.ZipFile(zip_path, "r") as f:
-            f.extractall(path.parent)
-        for _path in path.parent.glob("**/*"):
-            if _path.suffix == ".nc":
-                _path.rename(path)
-            elif _path.is_file():
-                _path.unlink()
-        for _path in path.parent.glob("*"):
-            if _path.is_dir():
-                _path.rmdir()
+    if path.exists():
+        return pl.read_ipc(path)
+    else:
+        if not bathymetry_path.exists():
+            with zipfile.ZipFile(zip_path, "r") as f:
+                f.extractall(bathymetry_path.parent)
+            for _path in bathymetry_path.parent.glob("**/*"):
+                if _path.suffix == ".nc":
+                    _path.rename(bathymetry_path)
+                elif _path.is_file():
+                    _path.unlink()
+            for _path in bathymetry_path.parent.glob("*"):
+                if _path.is_dir():
+                    _path.rmdir()
 
-    bathymetry = xr.load_dataset(path)
+        bathymetry = xr.load_dataset(bathymetry_path)
+
+        data = pl.DataFrame(
+            [
+                {
+                    "wind_direction": direction,
+                    "fetch": _calculate_fetch(cpe_loc, direction, bathymetry),
+                }
+                for direction in range(1, 37)
+            ]
+        )
+        data.write_ipc(path)
+        return data
 
 
 ###########
@@ -426,3 +442,9 @@ def _download_monthly_era5_monthly_data(
             )
         except requests.HTTPError:
             path.touch()
+
+
+def _calculate_fetch(
+    loc: tuple[float, float], angle: float, bathymetry: xr.Dataset
+) -> float:
+    pass
