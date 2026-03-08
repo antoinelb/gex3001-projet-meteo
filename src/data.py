@@ -7,6 +7,7 @@ from pathlib import Path
 
 import cdsapi
 import httpx
+import numpy as np
 import polars as pl
 import pyproj
 import requests
@@ -73,7 +74,7 @@ def extract_storms(
     )
 
 
-def read_fetch() -> pl.DataFrame:
+def read_fetch(angle_spread: float = 90.0) -> pl.DataFrame:
     cpe_loc = (47.366445362339576, -61.87199621249825)
     lat, lon = cpe_loc
     path = data_dir / "raw" / "fetch.ipc"
@@ -101,7 +102,12 @@ def read_fetch() -> pl.DataFrame:
             [
                 {
                     "wind_direction": direction,
-                    "fetch": _calculate_fetch(cpe_loc, direction, bathymetry),
+                    "fetch": _calculate_fetch(
+                        cpe_loc,
+                        direction,
+                        bathymetry,
+                        angle_spread=angle_spread,
+                    ),
                 }
                 for direction in range(1, 37)
             ]
@@ -445,6 +451,88 @@ def _download_monthly_era5_monthly_data(
 
 
 def _calculate_fetch(
-    loc: tuple[float, float], angle: float, bathymetry: xr.Dataset
+    loc: tuple[float, float],
+    angle: int,
+    bathymetry: xr.Dataset,
+    *,
+    angle_spread: float = 90.0,
+    step_m: float = 500.0,
+    max_distance_m: float = 750_000.0,
 ) -> float:
-    pass
+    lat_origin, lon_origin = loc
+    lat_origin_rad = math.radians(lat_origin)
+
+    # Pre-extract numpy arrays for fast grid lookups
+    elev = bathymetry["elevation"].values
+    lat_arr = bathymetry["lat"].values
+    lon_arr = bathymetry["lon"].values
+
+    # Direction 1-36 maps to 10°-360°; use modulo so direction 36 -> 0° (north)
+    center_deg = (angle * 10) % 360
+    half_spread = angle_spread / 2.0
+
+    max_steps = int(max_distance_m / step_m)
+    n_lat = len(lat_arr)
+    n_lon = len(lon_arr)
+
+    weighted_fetch_sum = 0.0
+    cos_weight_sum = 0.0
+
+    # Cast sub-rays at 1° resolution across the angular spread
+    n_rays = int(angle_spread) + 1
+    for i in range(n_rays):
+        offset_deg = -half_spread + i
+        ray_deg = (center_deg + offset_deg) % 360
+        ray_rad = math.radians(ray_deg)
+
+        cos_weight = math.cos(math.radians(offset_deg))
+        if cos_weight <= 0:
+            continue
+
+        # Walk outward along the ray
+        ray_distance = 0.0
+        lat_cur = lat_origin
+        lon_cur = lon_origin
+
+        dlat_per_step = (step_m / 111_000.0) * math.cos(ray_rad)
+        dlon_per_step = (
+            step_m / (111_000.0 * math.cos(lat_origin_rad))
+        ) * math.sin(ray_rad)
+
+        for _ in range(max_steps):
+            lat_cur += dlat_per_step
+            lon_cur += dlon_per_step
+            ray_distance += step_m
+
+            # Nearest-neighbor lookup via binary search
+            lat_idx = np.searchsorted(lat_arr, lat_cur)
+            lon_idx = np.searchsorted(lon_arr, lon_cur)
+
+            # Snap to nearest rather than just lower-bound
+            if lat_idx >= n_lat:
+                break
+            if lat_idx > 0 and abs(lat_arr[lat_idx - 1] - lat_cur) < abs(
+                lat_arr[lat_idx] - lat_cur
+            ):
+                lat_idx -= 1
+
+            if lon_idx >= n_lon:
+                break
+            if lon_idx > 0 and abs(lon_arr[lon_idx - 1] - lon_cur) < abs(
+                lon_arr[lon_idx] - lon_cur
+            ):
+                lon_idx -= 1
+
+            elevation = elev[lat_idx, lon_idx]
+
+            # Land reached: stop this ray
+            if elevation >= 0:
+                break
+
+        weighted_fetch_sum += ray_distance * cos_weight
+        cos_weight_sum += cos_weight
+
+    if cos_weight_sum == 0:
+        return 0.0
+
+    return weighted_fetch_sum / cos_weight_sum
