@@ -5,17 +5,22 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "cdsapi>=0.7.7",
     "httpx>=0.28.1",
+    "netcdf4>=1.7.4",
+    "numpy>=2.4.2",
     "plotly>=6.6.0",
     "polars>=1.38.1",
     "pyproj>=3.7.2",
     "tqdm>=4.67.3",
     "typer>=0.24.1",
+    "xarray>=2026.2.0",
 ]
 
 [dependency-groups]
 dev = [
     "ipykernel>=7.2.0",
+    "nbformat>=5.10.4",
     "ruff>=0.14.8",
     "ty>=0.0.1a32",
 ]
