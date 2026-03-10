@@ -24,35 +24,60 @@ data_dir = Path(__file__).parent / ".." / "data"
 ##########
 
 
-async def read_weather_data() -> tuple[pl.DataFrame, pl.DataFrame]:
+async def read_weather_data(
+    *, angle: int = 45
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     cpe_loc = (47.366445362339576, -61.87199621249825)
     n_years = 19
     async with httpx.AsyncClient() as client:
         stations = await _read_stations(client)
         stations = _determine_closest_stations(cpe_loc, stations, n=10)
         closest, latest = _select_stations(stations, n_years=n_years)
-        closest = await _read_station_data(client, closest)
-        latest = await _read_station_data(client, latest)
-    return closest, latest
+        closest = await _read_station_data(client, closest, angle=angle)
+        latest = await _read_station_data(client, latest, angle=angle)
+    return closest.sort("datetime"), latest.sort("datetime")
 
 
 async def read_era5_data(
-    start: datetime, end: datetime
+    start: datetime, end: datetime, *, angle: int = 45
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     cpe_loc = (47.366445362339576, -61.87199621249825)
     lat, lon = cpe_loc
     lat = round(lat * 4) / 4
     lon = round(lon * 4) / 4
-    hourly_data = _read_era5_hourly_data(lat, lon, start, end)
+    hourly_data = _read_era5_hourly_data(lat, lon, start, end, angle=angle)
     monthly_data = await _read_era5_monthly_data(lat, lon, start, end)
     return hourly_data, monthly_data
 
 
-def extract_storms(
-    data: pl.DataFrame, *, threshold: float = 15.0
+def combine_to_ice_cover(
+    data: pl.DataFrame, monthly_era5: pl.DataFrame
 ) -> pl.DataFrame:
     return (
-        data.with_columns((pl.col("wind_speed") > threshold).alias("in_storm"))
+        data.with_columns(
+            pl.col("datetime").dt.year().alias("year"),
+            pl.col("datetime").dt.month().alias("month"),
+        )
+        .join(
+            monthly_era5.with_columns(
+                pl.col("datetime").dt.year().alias("year"),
+                pl.col("datetime").dt.month().alias("month"),
+            ),
+            on=["year", "month"],
+        )
+        .drop("year", "month")
+        .sort("datetime")
+    )
+
+
+def extract_storms(
+    data: pl.DataFrame, *, wind_threshold: float, duration_threshold: float
+) -> pl.DataFrame:
+    # extract individual storms
+    data = (
+        data.with_columns(
+            (pl.col("wind_speed") > wind_threshold).alias("in_storm")
+        )
         .with_columns(
             (pl.col("in_storm") != pl.col("in_storm").shift().fill_null(False))
             .cum_sum()
@@ -62,19 +87,46 @@ def extract_storms(
         .group_by("storm_id")
         .agg(
             pl.col("datetime").min().alias("datetime_start"),
+            pl.col("datetime").max().alias("datetime_end"),
             (pl.col("datetime").max() - pl.col("datetime").min())
             .dt.total_hours()
             .alias("duration"),
-            pl.col("wind_direction").min().alias("wind_direction_min"),
-            pl.col("wind_direction").max().alias("wind_direction_max"),
+            pl.col("wind_direction").mode().first(),
             pl.col("wind_speed").mean().alias("wind_speed_mean"),
             pl.col("wind_speed").max().alias("wind_speed_max"),
+            pl.col("sea_ice_cover").mean(),
         )
-        .filter(pl.col("duration") >= 1)
+        .filter(pl.col("duration") >= duration_threshold)
+        .sort("datetime_start")
     )
+    # combine storms less than 24h apart
+    data = (
+        data.with_columns(
+            (
+                (pl.col("datetime_start") - pl.col("datetime_end").shift())
+                > 24
+            ).alias("sufficient_time")
+        )
+        .with_columns(pl.col("sufficient_time").cum_sum().alias("group_id"))
+        .group_by("group_id")
+        .agg(
+            pl.col("datetime_start").min(),
+            pl.col("datetime_end").max(),
+            (pl.col("datetime_end").max() - pl.col("datetime_start").min())
+            .dt.total_hours()
+            .alias("duration"),
+            pl.col("wind_direction").sort_by("duration").last(),
+            (pl.col("wind_speed_mean") * pl.col("duration")).sum()
+            / pl.col("duration").sum(),
+            pl.col("wind_speed_max").max(),
+            pl.col("sea_ice_cover").mean(),
+        )
+        .rename({"group_id": "storm_id"})
+    )
+    return data
 
 
-def read_fetch(angle_spread: float = 90.0) -> pl.DataFrame:
+def read_fetch(*, angle: int = 45, angle_spread: float = 90.0) -> pl.DataFrame:
     cpe_loc = (47.366445362339576, -61.87199621249825)
     lat, lon = cpe_loc
     path = data_dir / "raw" / "fetch.ipc"
@@ -109,7 +161,7 @@ def read_fetch(angle_spread: float = 90.0) -> pl.DataFrame:
                         angle_spread=angle_spread,
                     ),
                 }
-                for direction in range(1, 37)
+                for direction in range(angle, 360 + angle, angle)
             ]
         )
         data.write_ipc(path)
@@ -197,6 +249,7 @@ async def _read_station_data(
     client: httpx.AsyncClient,
     station: pl.DataFrame,
     *,
+    angle: int,
     limit: int = 10_000,
 ) -> pl.DataFrame:
     if station.shape[0] != 1:
@@ -246,11 +299,15 @@ async def _read_station_data(
                 ]
             ),
             how="vertical_relaxed",
-        ).with_columns(pl.lit(distance).alias("distance"))
+        ).with_columns(
+            pl.lit(distance).alias("distance"), pl.lit(id).alias("station_id")
+        )
         data.write_ipc(path)
 
     return data.with_columns(
-        pl.col("wind_speed") * 1000 / 3600  # convert from km/h to m/s
+        pl.col("wind_speed") * 1000 / 3600,  # convert from km/h to m/s
+        ((pl.col("wind_direction") * 10 + angle / 2) % 360 / angle).floor()
+        * angle,  # convert to nearest angle
     )
 
 
@@ -300,7 +357,7 @@ def _convert_degrees_to_decimal(x: float) -> float:
 
 
 def _read_era5_hourly_data(
-    lat: float, lon: float, start: datetime, end: datetime
+    lat: float, lon: float, start: datetime, end: datetime, *, angle: int
 ) -> pl.DataFrame:
     _start = start.strftime("%Y-%m-%d")
     _end = end.strftime("%Y-%m-%d")
@@ -370,9 +427,9 @@ def _read_era5_hourly_data(
                 ).alias("wind_direction_raw"),
             )
             .with_columns(
-                (pl.col("wind_direction_raw") / 10)
-                .ceil()
-                .alias("wind_direction")
+                ((pl.col("wind_direction_raw") / angle).ceil() * angle).alias(
+                    "wind_direction"
+                )  # convert to nearest angle
             )
         )
         data.write_ipc(path)
@@ -456,7 +513,7 @@ def _calculate_fetch(
     bathymetry: xr.Dataset,
     *,
     angle_spread: float = 90.0,
-    step_m: float = 500.0,
+    step_m: float = 100.0,
     max_distance_m: float = 750_000.0,
 ) -> float:
     lat_origin, lon_origin = loc
@@ -468,7 +525,7 @@ def _calculate_fetch(
     lon_arr = bathymetry["lon"].values
 
     # Direction 1-36 maps to 10°-360°; use modulo so direction 36 -> 0° (north)
-    center_deg = (angle * 10) % 360
+    center_deg = angle % 360
     half_spread = angle_spread / 2.0
 
     max_steps = int(max_distance_m / step_m)
