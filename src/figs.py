@@ -81,6 +81,7 @@ def create_wind_rose(data: pl.DataFrame, *, title: str) -> go.Figure:
             "height": 400,
             "width": 800,
             "margin": {"t": 50, "b": 0, "l": 0, "r": 0, "autoexpand": True},
+            "font_family": "Playfair Display",
             "barmode": "stack",
             "legend": {
                 "y": 1,
@@ -160,6 +161,7 @@ def create_qq_plot(
             "height": 400,
             "width": 800,
             "margin": {"t": 100, "b": 0, "l": 0, "r": 0, "autoexpand": True},
+            "font_family": "Playfair Display",
             "showlegend": False,
             "xaxis_title": series_1.name,
             "yaxis_title": series_2.name,
@@ -193,6 +195,7 @@ def create_ice_cover_plot(data: pl.DataFrame) -> go.Figure:
                 "r": 0,
                 "autoexpand": True,
             },
+            "font_family": "Playfair Display",
             "yaxis_title": "Proportion de l'année avec<br>au moins 50% de couvert de glace",
         },
     )
@@ -241,6 +244,7 @@ def create_storm_years_fig(
             "width": 800,
             "barmode": "stack",
             "margin": {"t": 60, "b": 60, "l": 0, "r": 0, "autoexpand": True},
+            "font_family": "Playfair Display",
             "yaxis_title": "Nombre de tempêtes",
             "annotations": [
                 {
@@ -304,6 +308,7 @@ def create_storm_intensity_fig(
             "height": 400,
             "width": 800,
             "margin": {"t": 60, "b": 100, "l": 0, "r": 0, "autoexpand": True},
+            "font_family": "Playfair Display",
             "xaxis_title": "Durée de la tempête (h)",
             "yaxis_title": "Vitesse de vent moyenne (m/s)",
             "annotations": [
@@ -373,6 +378,7 @@ def create_storm_wind_rose(
             "width": 600,
             "margin": {"t": 75, "b": 100, "l": 0, "r": 0, "autoexpand": True},
             "barmode": "stack",
+            "font_family": "Playfair Display",
             "polar": {
                 "radialaxis_showticklabels": False,
                 "radialaxis_showline": False,
@@ -422,6 +428,7 @@ def create_fetch_wind_rose(data: pl.DataFrame) -> go.Figure:
             "height": 400,
             "width": 600,
             "margin": {"t": 50, "b": 75, "l": 0, "r": 0, "autoexpand": True},
+            "font_family": "Playfair Display",
             "polar": {
                 "radialaxis_showticklabels": True,
                 "radialaxis_showline": True,

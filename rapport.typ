@@ -1,35 +1,87 @@
 // {{{ preamble
 
 #set page(
-  paper: "a4",
-  margin: (x: 2cm, y: 2.5cm),
-  numbering: "1",
+  margin: (x: 2.0cm, y: 2.0cm),
 )
+#set text(lang: "fr")
+#set text(font: "New Computer Modern", size: 11pt)
+#set par(
+  justify: true,
+  leading: 0.52em,
+  first-line-indent: 1em,
+)
+#set math.equation(numbering: "(1)")
 
-#set text(font: "New Computer Modern", size: 11pt, lang: "fr")
-#set par(justify: true, leading: 0.65em, first-line-indent: (amount: 0.65em, all: true))
-#set heading(numbering: "1.1")
-#show math.equation: set text(features: (calt: 0))
+#show heading: set align(left)
 
-#let first-heading = state("first-heading", true)
+#show heading: it => {
+  it
+  par(first-line-indent: 1em)[]
+}
+#show figure: it => {
+  it
+  par(first-line-indent: 1em)[]
+}
 
-#show heading.where(level: 1): it => {
-  if first-heading.get() {
-    first-heading.update(false)
-    text(size: 14pt, weight: "bold", it)
+#show math.equation.where(block: true): it => {
+  if it.has("label") and it.label == <small> {
+    set text(size: 8pt)
+    it
   } else {
-    text(size: 14pt, weight: "bold", it)
+    it
   }
 }
 
-#show heading.where(level: 2): it => {
-  text(size: 12pt, weight: "bold", it)
+#show math.ast: math.dot.op
+
+#show figure.where(kind: table): set figure.caption(position: top)
+
+#show ref: it => {
+  if it.element != none {
+    let elem = it.element
+    if elem.func() == figure {
+      let nums = counter(figure.where(kind: elem.kind)).at(elem.location())
+      numbering("1", ..nums) // Forces simple number format
+    } else if elem.func() in (math.equation, table) {
+      let nums = counter(elem.func()).at(elem.location())
+      numbering("1", ..nums) // Forces simple number format
+    } else {
+      it
+    }
+  } else {
+    it
+  }
+}
+#show outline.entry: it => {
+  if it.element.func() == figure {
+    let fig = it.element
+    let cap = fig.caption
+
+    if cap != none and cap.has("body") {
+      let body = cap.body
+      let clean = if body.has("children") {
+        body.children.filter(c => c.func() != footnote).join()
+      } else {
+        body
+      }
+
+      let supplement = fig.supplement
+      let num = numbering(fig.numbering, ..counter(figure.where(kind: fig.kind)).at(fig.location()))
+
+      block[
+        #link(fig.location())[#supplement #num: #clean]
+        #box(width: 1fr, repeat[.])
+        #it.page()
+      ]
+    } else {
+      it
+    }
+  } else {
+    it
+  }
 }
 
-#show image: set align(center)
-#show table: set align(center)
-
-#let vec(v) = math.bold(v)
+#show <_>: set math.equation(numbering: none)
 
 #let in-outline = state("in-outline", false)
 
@@ -153,9 +205,41 @@ Comparé à la distribution de toutes les tempêtes, les vitesses moyennes des v
 
 La tempête de conception utilisée sera définie par sa vitesse de vent moyenne et sa durée.
 
-Deux périodes de retour seront considérées, soit 50 et 100 ans.
-La période de retour de 100 ans est plus sécuritaire, mais celle-ci est au-delà de la limite de 2-3 fois la durée des données recommandée~@cem[p.~II-8-13].
+Les figures~@fig:fit-speed et @fig:fit-duration montre les ajustements de différentes distributions de valeurs extrêmes.
+L'évaluation de celles-ci est faite en mesurant la différence entre les quantiles observés et théoriques du maximum annuel des tempêtes et la droite d'ajustement parfait, à la fois sur toutes les tempêtes maximales et sur les 25% tempêtes supérieures.
+L'évaluation sur les 25% tempêtes les plus fortes est retenue puisqu'elle correspond mieux à ce qui est visé avec les périodes de retour.
+Seules les 4 meilleurs ajustements sont montrés parmi les 34 faits avec diverses distributions pou chacune des variables.
+C'est donc la GEV utilisant les 3 maximums annuels qui est utilisé pour établir les périodes de retour de la vitesse moyenne de vent de la tempête et la GPD avec un seuil de quantile 40% pour la durée de celle-ci.
 
+Deux périodes de retour sont considérées, soit 50 et 100 ans.
+La période de retour de 100 ans est plus sécuritaire, mais celle-ci est au-delà de la limite de 2-3 fois la durée des données recommandée~@cem[p.~II-8-13].
+Ceci permet d'établir les valeurs de périodes de retour présentées au tableau~@tab:storm-return.
+
+#figure(
+  caption: "QQ-plot des 4 meilleurs ajustements de distributions à la vitesse de vent des tempêtes maximales annuelles",
+  grid(
+    columns: 2,
+    image("figures/speed_fit_1.svg"), image("figures/speed_fit_2.svg"),
+    image("figures/speed_fit_3.svg"), image("figures/speed_fit_4.svg"),
+  ),
+) <fig:fit-speed>
+
+#figure(
+  caption: "QQ-plot des 4 meilleurs ajustements de distributions à la durée des tempêtes maximales annuelles",
+  grid(
+    columns: 2,
+    image("figures/duration_fit_1.svg"), image("figures/duration_fit_2.svg"),
+    image("figures/duration_fit_3.svg"), image("figures/duration_fit_4.svg"),
+  ),
+) <fig:fit-duration>
+
+#include "figures/storm_return_periods.typ"
+
+Une voit les vitesses de vent obtenues, il faut aussi déterminer comment ajuster celles-ci par rapport au fait que les vents seront plus rapides au-dessus de l'océan que sur terre où ils ont été mesurés.
+La figure~@fig:air-sea-diff-1 permet de déterminer un ratio d'amplification en fonction de la différence de température de l'air et de la mer.
+Comme pour la vitesse de vent et la durée, une distribution a été ajustée aux données du lieu d'intérêt, mais cette fois-ci à partir des données de réanalyse d'ERA5 puisqu'aucune station proche ne collectait les données de température de la mer.
+Le meilleur ajustement, déterminé à partir de la statistique d'Anderson-Darling, à ces données était la distribution T non centrée et les périodes de retour minimales sont considérées pour cette différence plutôt que le maximum puisque ce sont celles-ci qui mèneront aux valeurs les plus conservatrices pour la conception.
+Le tableau~@tab:diff-return montre ces résultats avec le ratio d'amplification associé.
 
 #figure(
   image("figures/air-sea_adjustment.png", width: 50%),
@@ -163,11 +247,21 @@ La période de retour de 100 ans est plus sécuritaire, mais celle-ci est au-del
     [Ratio d'amplification permettant de prendre en compte les différences de température air-mer~@shore[p.~3-31]],
     [Ratio d'amplification permettant de prendre en compte les différences de température air-mer],
   ),
-)
+) <fig:air-sea-diff-1>
+
+#figure(
+  image("figures/air-sea_diff.svg"),
+  caption: [Distribution des différences de température air-mer à partir des données d'ERA5 pour le lieu d'intérêt],
+) <fig:air-sea-diff-2>
+
+#include "figures/diff_return_periods.typ"
+
 
 *_Calculer un ajustement moyen et quantile par rapport aux surfaces d'eau et air_*
 
 *_Faire un fit des vitesses de vent et des durées de tempête_*
+
+*_Utiliser un percentile et vérifier l'ajustement plutôt que prendre des seuils d'avance_*
 
 *_Trouver quel est le temps de retour à viser_*
 

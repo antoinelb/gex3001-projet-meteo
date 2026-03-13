@@ -70,62 +70,6 @@ def combine_to_ice_cover(
     )
 
 
-def extract_storms(
-    data: pl.DataFrame, *, wind_threshold: float, duration_threshold: float
-) -> pl.DataFrame:
-    # extract individual storms
-    data = (
-        data.with_columns(
-            (pl.col("wind_speed") > wind_threshold).alias("in_storm")
-        )
-        .with_columns(
-            (pl.col("in_storm") != pl.col("in_storm").shift().fill_null(False))
-            .cum_sum()
-            .alias("storm_id")
-        )
-        .filter(pl.col("in_storm"))
-        .group_by("storm_id")
-        .agg(
-            pl.col("datetime").min().alias("datetime_start"),
-            pl.col("datetime").max().alias("datetime_end"),
-            (pl.col("datetime").max() - pl.col("datetime").min())
-            .dt.total_hours()
-            .alias("duration"),
-            pl.col("wind_direction").mode().first(),
-            pl.col("wind_speed").mean().alias("wind_speed_mean"),
-            pl.col("wind_speed").max().alias("wind_speed_max"),
-            pl.col("sea_ice_cover").mean(),
-        )
-        .filter(pl.col("duration") >= duration_threshold)
-        .sort("datetime_start")
-    )
-    # combine storms less than 24h apart
-    data = (
-        data.with_columns(
-            (
-                (pl.col("datetime_start") - pl.col("datetime_end").shift())
-                > 24
-            ).alias("sufficient_time")
-        )
-        .with_columns(pl.col("sufficient_time").cum_sum().alias("group_id"))
-        .group_by("group_id")
-        .agg(
-            pl.col("datetime_start").min(),
-            pl.col("datetime_end").max(),
-            (pl.col("datetime_end").max() - pl.col("datetime_start").min())
-            .dt.total_hours()
-            .alias("duration"),
-            pl.col("wind_direction").sort_by("duration").last(),
-            (pl.col("wind_speed_mean") * pl.col("duration")).sum()
-            / pl.col("duration").sum(),
-            pl.col("wind_speed_max").max(),
-            pl.col("sea_ice_cover").mean(),
-        )
-        .rename({"group_id": "storm_id"})
-    )
-    return data
-
-
 def read_fetch(*, angle: int = 45, angle_spread: float = 90.0) -> pl.DataFrame:
     cpe_loc = (47.366445362339576, -61.87199621249825)
     lat, lon = cpe_loc
