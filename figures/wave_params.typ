@@ -1,0 +1,26 @@
+#figure(
+  caption: [Paramètres de vagues pour les périodes de retour],
+  table(
+    columns: (auto, auto, 7em, 7em),
+    align: (left, center, center, center),
+    inset: (x: 0.25em, y: 0.5em),
+    stroke: (x, y) => (
+      top: if y == 0 and x < 2 { none } else { 1pt },
+      bottom: 1pt,
+      left: if x == 1 or (x == 0 and y == 0) { none } else { 1pt },
+      right: if x == 0 { none } else { 1pt },
+    ),
+    [], [], [*50 ans*], [*100 ans*],
+    [$F$], [[m]], [210 529], [210 529],
+    [$U'$], [[m/s]], [16.71], [17.22],
+    [$t$], [[h]], [38.34], [39.78],
+    [$U$], [[m/s]], [19.71], [20.66],
+    [$F^\*$], [[-]], [5 314], [4 838],
+    [$t^\*$], [[-]], [68 684], [68 003],
+    [$F_(e f f)^\*$], [[-]], [31 543], [31 075],
+    [$H_(m 0)^\*$], [[-]], [0.117], [0.111],
+    [$T_p^\*$], [[-]], [4.99], [4.84],
+    [*$H_(m 0)$*], [*[m]*], [*4.62*], [*4.84*],
+    [*$T_p$*], [*[s]*], [*10.03*], [*10.19*],
+  ),
+) <tab:wave-params>

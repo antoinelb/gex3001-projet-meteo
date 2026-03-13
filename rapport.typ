@@ -257,25 +257,50 @@ Le tableau~@tab:diff-return montre ces résultats avec le ratio d'amplification 
 #include "figures/diff_return_periods.typ"
 
 
-*_Calculer un ajustement moyen et quantile par rapport aux surfaces d'eau et air_*
-
-*_Faire un fit des vitesses de vent et des durées de tempête_*
-
-*_Utiliser un percentile et vérifier l'ajustement plutôt que prendre des seuils d'avance_*
-
-*_Trouver quel est le temps de retour à viser_*
-
-*_Ajouter la pression atmosphérique pour prendre en compte la baisse de pression_*
-
-*_Combiner les tempêtes où il y a seulement une heure entre_*
-
-
 = Calcul des vagues de conception
+
+En combinant les différentes variables de tempête, on peut établir des vagues pour les différentes périodes de retour à l'aide des équations théoriques de la méthode JONSWAP.
+À partir des données de fetch $F$ (m), de la durée de tempête $t$ (s), de la vitesse de vent moyenne $U'$ (m/s) et du ratio d'amplification $R_T$ (-), les paramètres suivants sont calculés:
+$
+     H_(m 0) & = (U^2 H_(m 0)^\*) / g #h(4em) && T_p          && = (U T_p^\*) / g \
+           U & = R_T U' #h(4em)               && F^\*         && = (g F) / U^2 \
+        t^\* & = (g t) / U
+               #h(4em)                        && F^\*_(e f f) && = (t^\* / 68.8)^(3/2) \
+  H_(m 0)^\* & = cases(
+                 0.0016 (F^\*)^(1/2) "if" F^\* < F_(e f f)^\*,
+                 0.0016 (F_(e f f)^\*)^(1/2) "if" F^\* >= F_(e f f)^\*,
+               ) #h(4em)                      && T_p^\*       && = cases(
+                                                                   0.286 (F^\*)^(1/3) "if" F^\* < F_(e f f)^\*,
+                                                                   0.286 (F_(e f f)^\*)^(1/3) "if" F^\* >= F_(e f f)^\*,
+                                                                 )
+$
+où $g$ est la constante gravitationnelle de 9.81 m/s#super[2].
+Il faut aussi prendre en compte que physiquement, les paramètres $H_(m 0)^\*$ et $T_p^\*$ peuvent être au maximum 0.243 et 8.13.
+
+#include "figures/wave_params.typ"
 
 = Autres facteurs importants
 
-== Précipitation
+D'autres facteurs météorologiques pourraient être importants lors de la conception, soit la pression qui affecte le niveau d'eau, les précipitations et températures qui pourraient affecter des infrastructures végétalisées.
 
+La figure~@fig:pressure montre la distribution des pressions et le tableau~@tab:pressure-return les pires pressions qui peuvent être attendues.
+
+#figure(
+  caption: [Distribution de la pression atmosphérique à la station 7053KGR],
+  image("figures/pressures.svg"),
+) <fig:pressure>
+
+#include "figures/pressure_return_periods.typ"
+
+La figure~@fig:precipitation-temperature montre la distribution des précipitations journalières lors des journées pluvieuses, soit 16.8% des journées en moyenne, et la distribution des températures horaires.
+
+#figure(
+  caption: [Distribution de la précipitation journalière et de la température horaire à la station 7053KGR],
+  grid(
+    columns: 2,
+    image("figures/precipitation.svg"), image("figures/temperature.svg"),
+  ),
+) <fig:precipitation-temperature>
 
 
 #bibliography("references.bib", style: "apa")

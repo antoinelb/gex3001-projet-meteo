@@ -177,11 +177,12 @@ def create_storms_qq_plot(
             },
             "height": 400,
             "width": 800,
-            "margin": {"t": 50, "b": 0, "l": 0, "r": 0, "autoexpand": True},
+            "margin": {"t": 75, "b": 0, "l": 0, "r": 0, "autoexpand": True},
             "font_family": "Playfair Display",
+            "font_size": 18,
             "showlegend": False,
-            "xaxis_title": r"$q_\text{théorique}$",
-            "yaxis_title": r"$q_\text{observations}$",
+            "xaxis_title": "<i>q</i><sub>théorique</sub>",
+            "yaxis_title": "<i>q</i><sub>observations</sub>",
             "annotations": [
                 {
                     "showarrow": False,
@@ -196,7 +197,7 @@ def create_storms_qq_plot(
                 {
                     "showarrow": False,
                     "x": 0,
-                    "y": 0.95,
+                    "y": 0.9,
                     "xref": "paper",
                     "yref": "paper",
                     "xshift": 5,
@@ -290,15 +291,180 @@ def create_land_sea_diff_fig(
                     "autoexpand": True,
                 },
                 "font_family": "Playfair Display",
+                "font_size": 18,
                 "legend": {
                     "x": 0,
                     "xanchor": "left",
                     "bgcolor": "rgba(0,0,0,0)",
                 },
                 "xaxis_title": "Différence de température air-mer (<i>T</i><sub>a</sub> − <i>T</i><sub>m</sub>) °C",
+                "yaxis_title": "Densité",
             },
         ),
         _get_quantiles,
+    )
+
+
+def create_pressure_fig(
+    data: pl.DataFrame,
+) -> tuple[go.Figure, Callable[[float], float]]:
+    _data = data["pressure"].drop_nulls().sample(10_000).to_numpy()
+    norm_params = st.norm.fit(_data)
+    skewnorm_params = st.skewnorm.fit(_data)
+    nct_params = st.nct.fit(
+        _data, 5, 0, loc=np.mean(_data), scale=np.std(_data)
+    )
+    norm_ad = _calculate_anderson_darling(
+        _data, lambda x: st.norm.cdf(x, *norm_params)
+    )
+    skewnorm_ad = _calculate_anderson_darling(
+        _data, lambda x: st.skewnorm.cdf(x, *skewnorm_params)
+    )
+    nct_ad = _calculate_anderson_darling(
+        _data, lambda x: st.nct.cdf(x, *nct_params)
+    )
+    x = np.linspace(_data.min(), _data.max(), 1000)
+
+    def _get_quantiles(q: float) -> float:
+        return st.nct.ppf(q, *nct_params)
+
+    return (
+        go.Figure(
+            [
+                go.Histogram(
+                    x=_data,
+                    histnorm="probability density",
+                    nbinsx=200,
+                    name="Densité",
+                ),
+                go.Scatter(
+                    x=x,
+                    y=st.norm.pdf(x, *norm_params),
+                    name=f"Normale (<i>A</i><sup>2</sup> = {norm_ad:.2f})",
+                ),
+                go.Scatter(
+                    x=x,
+                    y=st.skewnorm.pdf(x, *skewnorm_params),
+                    name=f"Normale asymétrique (<i>A</i><sup>2</sup> = {skewnorm_ad:.2f})",
+                ),
+                go.Scatter(
+                    x=x,
+                    y=st.nct.pdf(x, *nct_params),
+                    name=f"T non centrée (<i>A</i><sup>2</sup> = {nct_ad:.2f})",
+                ),
+            ],
+            {
+                "height": 400,
+                "width": 800,
+                "margin": {
+                    "t": 0,
+                    "b": 0,
+                    "l": 0,
+                    "r": 0,
+                    "autoexpand": True,
+                },
+                "font_family": "Playfair Display",
+                "font_size": 18,
+                "legend": {
+                    "x": 0,
+                    "xanchor": "left",
+                    "bgcolor": "rgba(0,0,0,0)",
+                },
+                "xaxis_title": "Pression atmosphérique (kPa)",
+                "yaxis_title": "Densité",
+            },
+        ),
+        _get_quantiles,
+    )
+
+
+def create_precipitation_fig(
+    data: pl.DataFrame,
+) -> go.Figure:
+    data = data.group_by(pl.col("datetime").dt.date()).agg(
+        pl.col("precipitation").sum()
+    )
+    _data = data["precipitation"].drop_nulls().to_numpy()
+    p_zeros = (_data == 0).mean()
+    _data = _data[_data > 0]
+
+    return go.Figure(
+        [
+            go.Histogram(
+                x=_data,
+                histnorm="probability density",
+                nbinsx=200,
+                name="Densité",
+            ),
+        ],
+        {
+            "height": 400,
+            "width": 800,
+            "margin": {
+                "t": 0,
+                "b": 0,
+                "l": 0,
+                "r": 0,
+                "autoexpand": True,
+            },
+            "font_family": "Playfair Display",
+            "font_size": 18,
+            "legend": {
+                "x": 1,
+                "xanchor": "right",
+                "bgcolor": "rgba(0,0,0,0)",
+            },
+            "xaxis_title": "Précipitation (mm)",
+            "yaxis_title": "Densité",
+            "annotations": [
+                {
+                    "showarrow": False,
+                    "x": 0.5,
+                    "xanchor": "center",
+                    "y": 0.5,
+                    "xref": "paper",
+                    "yref": "paper",
+                    "text": f"Proportion de jours avec aucune précipitation = {p_zeros*100:.1f}%",
+                }
+            ],
+        },
+    )
+
+
+def create_temperature_fig(
+    data: pl.DataFrame,
+) -> go.Figure:
+    _data = data["temperature"].drop_nulls().sample(10_000).to_numpy()
+
+    return go.Figure(
+        [
+            go.Histogram(
+                x=_data,
+                histnorm="probability density",
+                nbinsx=200,
+                name="Densité",
+            ),
+        ],
+        {
+            "height": 400,
+            "width": 800,
+            "margin": {
+                "t": 0,
+                "b": 0,
+                "l": 0,
+                "r": 0,
+                "autoexpand": True,
+            },
+            "font_family": "Playfair Display",
+            "font_size": 18,
+            "legend": {
+                "x": 1,
+                "xanchor": "right",
+                "bgcolor": "rgba(0,0,0,0)",
+            },
+            "xaxis_title": "Température (°C)",
+            "yaxis_title": "Densité",
+        },
     )
 
 
@@ -333,6 +499,103 @@ def write_diff_return_periods(data: pl.DataFrame) -> None:
             ]
         )
         for r in data.sort("period").to_dicts()
+    )
+    with open(template_path) as f:
+        template = f.read()
+    with open(path, "w") as f:
+        f.write(template.replace("__body__", body))
+
+
+def write_pressure_return_periods(data: pl.DataFrame) -> None:
+    template_path = templates_dir / "pressure_return_periods.typ"
+    path = figures_dir / "pressure_return_periods.typ"
+    body = ",\n    ".join(
+        ", ".join(
+            [
+                f"[{r['period']}]",
+                f"[{r['pressure']:.0f}]",
+            ]
+        )
+        for r in data.sort("period").to_dicts()
+    )
+    with open(template_path) as f:
+        template = f.read()
+    with open(path, "w") as f:
+        f.write(template.replace("__body__", body))
+
+
+def write_wave_params(data: pl.DataFrame, fetch: float) -> None:
+    template_path = templates_dir / "wave_params.typ"
+    path = figures_dir / "wave_params.typ"
+    g = 9.81
+    variables = [
+        ("F", r"$F$", "[m]", ",.0f"),
+        ("U'", r"$U'$", "[m/s]", ".2f"),
+        ("t", r"$t$", "[h]", ".2f"),
+        ("U", r"$U$", "[m/s]", ".2f"),
+        ("F*", r"$F^\*$", "[-]", ",.0f"),
+        ("t*", r"$t^\*$", "[-]", ",.0f"),
+        ("F_eff*", r"$F_(e f f)^\*$", "[-]", ",.0f"),
+        ("H_m0*", r"$H_(m 0)^\*$", "[-]", ".3f"),
+        ("T_p*", r"$T_p^\*$", "[-]", ".2f"),
+        ("H_m0", r"$H_(m 0)$", "[m]", ".2f"),
+        ("T_p", r"$T_p$", "[s]", ".2f"),
+    ]
+    data = (
+        data.select(
+            "period",
+            pl.col("wind_speed").alias("U'"),
+            pl.col("duration").alias("t"),
+            pl.col("R_T"),
+            pl.lit(fetch).alias("F"),
+        )
+        .with_columns((pl.col("U'") * pl.col("R_T")).alias("U"))
+        .with_columns(
+            (pl.col("F") * g / pl.col("U") ** 2).alias("F*"),
+            (pl.col("t") * 3600 * g / pl.col("U")).alias("t*"),
+        )
+        .with_columns(((pl.col("t*") / 68.8) ** (3 / 2)).alias("F_eff*"))
+        .with_columns(
+            (
+                pl.min_horizontal(
+                    0.243,
+                    0.0016
+                    * pl.min_horizontal(pl.col("F*"), pl.col("F_eff*"))
+                    ** (1 / 2),
+                )
+            ).alias("H_m0*"),
+            (
+                pl.min_horizontal(
+                    8.13,
+                    0.286
+                    * pl.min_horizontal(pl.col("F*"), pl.col("F_eff*"))
+                    ** (1 / 3),
+                )
+            ).alias("T_p*"),
+        )
+        .with_columns(
+            (pl.col("U") ** 2 * pl.col("H_m0*") / g).alias("H_m0"),
+            (pl.col("U") * pl.col("T_p*") / g).alias("T_p"),
+        )
+        .sort("period")
+    )
+    body = ",\n    ".join(
+        [
+            (
+                f"[*{variable}*], "
+                if name in ("H_m0", "T_p")
+                else f"[{variable}], "
+            )
+            + (f"[*{unit}*], " if name in ("H_m0", "T_p") else f"[{unit}], ")
+            + ", ".join(
+                ("[*{{x:{f}}}*]" if name in ("H_m0", "T_p") else "[{{x:{f}}}]")
+                .format(f=format)
+                .format(x=r[name])
+                .replace(",", " ")
+                for r in data.to_dicts()
+            )
+            for name, variable, unit, format in variables
+        ]
     )
     with open(template_path) as f:
         template = f.read()

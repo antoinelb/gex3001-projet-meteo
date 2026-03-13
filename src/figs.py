@@ -1,4 +1,6 @@
+import re
 import textwrap
+from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
@@ -16,6 +18,15 @@ storm_message = "Une tempête est définie comme un événement avec vents soute
 ##########
 # public #
 ##########
+
+
+def write_fig(fig: go.Figure, path: Path) -> None:
+    fig.write_image(path)
+    if path.suffix == ".svg":
+        svg = path.read_text()
+        # Kaleido miscalculates legend clipPath width with custom fonts
+        svg = re.sub(r'clip-path="url\(#legend[^"]*\)"', "", svg)
+        path.write_text(svg)
 
 
 def create_wind_rose(data: pl.DataFrame, *, title: str) -> go.Figure:
@@ -73,29 +84,36 @@ def create_wind_rose(data: pl.DataFrame, *, title: str) -> go.Figure:
         {
             "title": {
                 "x": 0.5,
-                "y": 1,
+                "y": 0.875 if "<br>" in title else 1,
                 "xanchor": "center",
                 "text": title,
                 "yanchor": "top",
             },
             "height": 400,
             "width": 800,
-            "margin": {"t": 50, "b": 0, "l": 0, "r": 0, "autoexpand": True},
+            "margin": {
+                "t": 150 if "<br>" in title else 50,
+                "b": 0,
+                "l": 0,
+                "r": 0,
+                "autoexpand": True,
+            },
             "font_family": "Playfair Display",
+            "font_size": 22,
             "barmode": "stack",
             "legend": {
                 "y": 1,
                 "yanchor": "top",
             },
             "polar": {
-                "domain": {"x": [0, 0.45]},
+                "domain": {"x": [0, 0.425]},
                 "radialaxis_showticklabels": False,
                 "radialaxis_showline": False,
                 "angularaxis_rotation": 90,
                 "angularaxis_direction": "clockwise",
             },
             "polar2": {
-                "domain": {"x": [0.55, 1]},
+                "domain": {"x": [0.575, 1]},
                 "radialaxis_showticklabels": False,
                 "radialaxis_showline": False,
                 "angularaxis_rotation": 90,
@@ -105,7 +123,7 @@ def create_wind_rose(data: pl.DataFrame, *, title: str) -> go.Figure:
                 {
                     "showarrow": False,
                     "x": 0.225,
-                    "y": 1,
+                    "y": 1.1 if "<br>" in title else 0.975,
                     "xref": "paper",
                     "yref": "paper",
                     "xanchor": "center",
@@ -115,7 +133,7 @@ def create_wind_rose(data: pl.DataFrame, *, title: str) -> go.Figure:
                 {
                     "showarrow": False,
                     "x": 0.775,
-                    "y": 1,
+                    "y": 1.1 if "<br>" in title else 0.975,
                     "xref": "paper",
                     "yref": "paper",
                     "xanchor": "center",
@@ -160,8 +178,15 @@ def create_qq_plot(
             },
             "height": 400,
             "width": 800,
-            "margin": {"t": 100, "b": 0, "l": 0, "r": 0, "autoexpand": True},
+            "margin": {
+                "t": 100 if len(title.split("<br>")) == 2 else 150,
+                "b": 0,
+                "l": 0,
+                "r": 0,
+                "autoexpand": True,
+            },
             "font_family": "Playfair Display",
+            "font_size": 18,
             "showlegend": False,
             "xaxis_title": series_1.name,
             "yaxis_title": series_2.name,
@@ -189,13 +214,14 @@ def create_ice_cover_plot(data: pl.DataFrame) -> go.Figure:
             "height": 400,
             "width": 800,
             "margin": {
-                "t": 50,
+                "t": 100,
                 "b": 0,
                 "l": 0,
                 "r": 0,
                 "autoexpand": True,
             },
             "font_family": "Playfair Display",
+            "font_size": 18,
             "yaxis_title": "Proportion de l'année avec<br>au moins 50% de couvert de glace",
         },
     )
@@ -243,8 +269,9 @@ def create_storm_years_fig(
             "height": 400,
             "width": 800,
             "barmode": "stack",
-            "margin": {"t": 60, "b": 60, "l": 0, "r": 0, "autoexpand": True},
+            "margin": {"t": 75, "b": 60, "l": 0, "r": 0, "autoexpand": True},
             "font_family": "Playfair Display",
+            "font_size": 18,
             "yaxis_title": "Nombre de tempêtes",
             "annotations": [
                 {
@@ -256,7 +283,7 @@ def create_storm_years_fig(
                     "yref": "paper",
                     "yanchor": "top",
                     "yshift": -25,
-                    "font_size": 10,
+                    "font_size": 14,
                     "align": "left",
                     "text": _wrap_text(
                         storm_message.format(
@@ -307,8 +334,9 @@ def create_storm_intensity_fig(
             },
             "height": 400,
             "width": 800,
-            "margin": {"t": 60, "b": 100, "l": 0, "r": 0, "autoexpand": True},
+            "margin": {"t": 75, "b": 100, "l": 0, "r": 0, "autoexpand": True},
             "font_family": "Playfair Display",
+            "font_size": 18,
             "xaxis_title": "Durée de la tempête (h)",
             "yaxis_title": "Vitesse de vent moyenne (m/s)",
             "annotations": [
@@ -320,8 +348,8 @@ def create_storm_intensity_fig(
                     "xref": "paper",
                     "yref": "paper",
                     "yanchor": "top",
-                    "yshift": -50,
-                    "font_size": 10,
+                    "yshift": -65,
+                    "font_size": 14,
                     "align": "left",
                     "text": _wrap_text(
                         storm_message.format(
@@ -376,9 +404,10 @@ def create_storm_wind_rose(
             },
             "height": 400,
             "width": 600,
-            "margin": {"t": 75, "b": 100, "l": 0, "r": 0, "autoexpand": True},
+            "margin": {"t": 100, "b": 75, "l": 0, "r": 0, "autoexpand": True},
             "barmode": "stack",
             "font_family": "Playfair Display",
+            "font_size": 14,
             "polar": {
                 "radialaxis_showticklabels": False,
                 "radialaxis_showline": False,
@@ -394,15 +423,15 @@ def create_storm_wind_rose(
                     "xref": "paper",
                     "yref": "paper",
                     "yanchor": "top",
-                    "yshift": -50,
-                    "font_size": 10,
+                    "yshift": -40,
+                    "font_size": 14,
                     "align": "left",
                     "text": _wrap_text(
                         storm_message.format(
                             wind_threshold=wind_threshold,
                             duration_threshold=duration_threshold,
                         ),
-                        width=100,
+                        width=80,
                     ),
                 }
             ],
@@ -427,8 +456,9 @@ def create_fetch_wind_rose(data: pl.DataFrame) -> go.Figure:
             },
             "height": 400,
             "width": 600,
-            "margin": {"t": 50, "b": 75, "l": 0, "r": 0, "autoexpand": True},
+            "margin": {"t": 50, "b": 25, "l": 0, "r": 0, "autoexpand": True},
             "font_family": "Playfair Display",
+            "font_size": 14,
             "polar": {
                 "radialaxis_showticklabels": True,
                 "radialaxis_showline": True,
